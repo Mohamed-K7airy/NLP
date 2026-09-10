@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentiment Analysis | NLP Project</title>
+    <meta name="description" content="English sentiment analysis interface powered by GloVe embeddings and a PyTorch neural network.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        * { margin: 0; padding: 0; }
+
+        :root {
+            --bg-dark: #050505;
+            --text-primary: #ffffff;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            
+            --brand-color: #6366f1;
+            --brand-gradient: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+            
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            
+            --positive: #10b981;
+            --positive-soft: rgba(16, 185, 129, 0.15);
+            --negative: #ef4444;
+            --negative-soft: rgba(239, 68, 68, 0.15);
+            --warning: #f59e0b;
+            --warning-soft: rgba(245, 158, 11, 0.15);
+            
+            --radius: 12px;
+            --font-sans: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: var(--font-sans);
+            color: var(--text-primary);
+            background-color: var(--bg-dark);
+            line-height: 1.6;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+        }
+
+        /* Background Animations */
+        .animated-background {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; overflow: hidden; background: #050505;
+        }
+        .blob {
+            position: absolute; filter: blur(80px);
+            border-radius: 50%; opacity: 0.4;
+            animation: float 20s infinite ease-in-out alternate;
+        }
+        .blob-1 { top: -10%; left: -10%; width: 500px; height: 500px; background: #6366f1; animation-delay: 0s; }
+        .blob-2 { bottom: -20%; right: -10%; width: 600px; height: 600px; background: #a855f7; animation-delay: -5s; }
+        .blob-3 { top: 40%; left: 40%; width: 400px; height: 400px; background: #ec4899; animation-delay: -10s; opacity: 0.2; }
+        
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(50px, 50px) scale(1.1); }
+        }
+
+        .mono { font-family: var(--font-mono); }
+
+        /* Navigation */
+        .glass-nav {
+            position: fixed; top: 0; width: 100%;
+            padding: 1rem 5%; display: flex;
+            justify-content: space-between; align-items: center;
+            background: rgba(5, 5, 5, 0.6); backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--glass-border); z-index: 100;
+        }
+        .logo { display: flex; align-items: center; gap: 0.5rem; font-size: 1.5rem; font-weight: 300; }
+        .logo svg { color: #a855f7; }
+        .logo strong { font-weight: 700; }
+        .status-pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 14px; border: 1px solid var(--glass-border);
+            border-radius: 50px; background: var(--glass-bg);
+            color: var(--text-secondary); font-size: 0.85rem; font-weight: 600;
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--positive); box-shadow: 0 0 10px var(--positive); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        /* Main Layout */
+        .app { max-width: 1200px; margin: 0 auto; padding: 100px 5% 40px; }
+
+        .hero { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 4rem; padding-top: 2rem; }
+        .eyebrow { color: #c084fc; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 1rem; }
+        h1 { font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; line-height: 1.1; margin-bottom: 1.5rem; }
+        .gradient-text { background: var(--brand-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero-copy { color: var(--text-secondary); font-size: 1.15rem; max-width: 650px; margin-bottom: 2rem; }
+
+        .workspace { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 2rem; align-items: start; }
+        @media (max-width: 960px) { .workspace { grid-template-columns: 1fr; } }
+
+        .card {
+            border: 1px solid var(--glass-border); border-radius: 16px;
+            background: var(--glass-bg); backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px); box-shadow: var(--glass-shadow);
+            overflow: hidden; display: flex; flex-direction: column;
+        }
+        .card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--glass-border);
+            background: rgba(0,0,0,0.2);
+        }
+        .card-title { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 1px; }
+        .card-meta { color: var(--text-secondary); font-size: 0.85rem; font-family: var(--font-mono); }
+        .card-body { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+        .input-shell { position: relative; }
+        textarea {
+            width: 100%; min-height: 200px; resize: vertical;
+            padding: 1.25rem; border: 1px solid var(--glass-border);
+            border-radius: var(--radius); background: rgba(0,0,0,0.2);
+            color: var(--text-primary); font-family: var(--font-sans); font-size: 1.1rem;
+            transition: border-color 0.3s, box-shadow 0.3s; outline: none;
+        }
+        textarea::placeholder { color: var(--text-muted); }
+        textarea:focus { border-color: #a855f7; box-shadow: 0 0 0 1px #a855f7; }
+        .char-count {
+            position: absolute; right: 12px; bottom: 12px; padding: 4px 8px;
+            border-radius: 6px; background: rgba(255,255,255,0.05); color: var(--text-secondary);
+            font-family: var(--font-mono); font-size: 0.8rem; pointer-events: none;
+        }
+
+        .input-feedback { display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem; color: var(--text-secondary); }
+        .quality-pill {
+            display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+            border-radius: 50px; font-weight: 700; font-size: 0.8rem;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+        }
+        .quality-pill::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+        .quality-pill.good { color: var(--positive); background: var(--positive-soft); border-color: rgba(16, 185, 129, 0.3); }
+        .quality-pill.good::before { background: var(--positive); }
+        .quality-pill.short { color: var(--warning); background: var(--warning-soft); border-color: rgba(245, 158, 11, 0.3); }
+        .quality-pill.short::before { background: var(--warning); }
+
+        .examples-label { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); font-weight: 700; margin-bottom: 0.5rem; }
+        .examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.75rem; }
+        .example-chip {
+            padding: 0.6rem 1rem; border: 1px solid var(--glass-border); border-radius: 8px;
+            background: rgba(0,0,0,0.2); color: var(--text-primary); font-family: var(--font-sans);
+            font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: center;
+        }
+        .example-chip:hover { background: rgba(168, 85, 247, 0.15); border-color: #a855f7; transform: translateY(-2px); }
+
+        .actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+        .hint { color: var(--text-muted); font-size: 0.85rem; }
+        kbd { display: inline-block; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.1); font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); }
+        
+        .button-row { display: flex; gap: 0.75rem; }
+        .btn-primary, .btn-secondary {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 700; font-family: var(--font-sans);
+            cursor: pointer; transition: all 0.3s; font-size: 0.95rem; outline: none; border: none;
+        }
+        .btn-primary { background: var(--brand-gradient); color: white; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4); }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(1); box-shadow: none; }
+        .btn-secondary { background: rgba(255,255,255,0.05); color: var(--text-primary); border: 1px solid var(--glass-border); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+        
+        .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .btn-primary.loading .spinner { display: block; }
+        .btn-primary.loading .btn-text { display: none; }
+
+        .message { display: none; padding: 1rem; border-radius: 8px; background: var(--warning-soft); border: 1px solid rgba(245, 158, 11, 0.3); color: #fcd34d; font-size: 0.9rem; font-weight: 600; }
+        .message.show { display: block; }
+
+        /* Results Area */
+        .empty-result {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 4rem 2rem; text-align: center; color: var(--text-muted); min-height: 400px;
+        }
+        .empty-icon { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,0.02); display: flex; align-items: center; justify-content: center; font-size: 2rem; border: 1px dashed var(--glass-border); margin-bottom: 1rem; }
+        .result-content { display: none; padding: 1.5rem; }
+        .results.has-result .empty-result { display: none; }
+        .results.has-result .result-content { display: block; }
+
+        .result-main { background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .sentiment-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        
+        .sentiment-badge {
+            display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px;
+            border-radius: 50px; font-weight: 800; font-size: 1rem; border: 1px solid var(--glass-border);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .sentiment-badge.positive { color: var(--positive); background: var(--positive-soft); border-color: rgba(16, 185, 129, 0.3); }
+        .sentiment-badge.negative { color: var(--negative); background: var(--negative-soft); border-color: rgba(239, 68, 68, 0.3); }
+        
+        .latency { color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; }
+        .confidence-value { font-size: 3.5rem; font-weight: 800; line-height: 1; margin-bottom: 0.5rem; }
+        .confidence-label { color: var(--text-secondary); font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .confidence-bar { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 1rem; overflow: hidden; }
+        .confidence-fill { height: 100%; width: 0%; border-radius: 4px; transition: width 1s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .confidence-fill.positive { background: var(--positive); box-shadow: 0 0 10px var(--positive); }
+        .confidence-fill.negative { background: var(--negative); box-shadow: 0 0 10px var(--negative); }
+
+        .details { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .detail { background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); padding: 1.25rem; border-radius: 12px; display: flex; flex-direction: column; gap: 0.5rem; }
+        @media (max-width: 600px) { .details { grid-template-columns: 1fr; } }
+        .detail-label { font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+        .detail-value { font-size: 0.95rem; color: var(--text-primary); font-weight: 600; word-wrap: break-word; }
+
+        .token-list { display: flex; flex-wrap: wrap; gap: 8px; }
+        .token-chip {
+            padding: 4px 10px; border-radius: 50px; background: rgba(255,255,255,0.1);
+            border: 1px solid var(--glass-border); font-size: 0.85rem; font-family: var(--font-mono);
+        }
+        .token-chip.negated { background: var(--warning-soft); color: #fcd34d; border-color: rgba(245, 158, 11, 0.3); }
+
+        footer { text-align: center; padding: 3rem 0; color: var(--text-muted); font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="animated-background">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <header class="glass-nav">
+        <div class="logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            <span>Neural<strong>Sent</strong></span>
+        </div>
+        <div class="status-pill">
+            <span class="status-dot"></span> System Online
+        </div>
+    </header>
+
+    <main class="app">
+        <section class="hero">
+            <div class="eyebrow">GloVe 300d + PyTorch Neural Network</div>
+            <h1>Next-Gen <span class="gradient-text">Sentiment Analysis</span></h1>
+            <p class="hero-copy">Experience the power of advanced Natural Language Processing. Type any sentence below to analyze its sentiment with extreme precision.</p>
+        </section>
+
+        <section class="workspace">
+            <div class="card glass-panel">
+                <div class="card-header">
+                    <div class="card-title">Input Payload</div>
+                    <div class="card-meta">English only | Max 1000 chars</div>
+                </div>
+                <div class="card-body">
+                    <div class="input-shell">
+                        <textarea id="sentence-input" maxlength="1000" placeholder="Type a sentence here... e.g., 'The new design is absolutely breathtaking!'"></textarea>
+                        <div class="char-count"><span id="char-count">0</span> / 1000</div>
+                    </div>
+                    
+                    <div class="input-feedback">
+                        <span id="quality-text">Type at least three meaningful English words.</span>
+                        <span id="quality-pill" class="quality-pill">Waiting</span>
+                    </div>
+
+                    <div>
+                        <div class="examples-label">Quick Scenarios</div>
+                        <div class="examples">
+                            <button class="example-chip" type="button" data-text="This movie was absolutely fantastic and beautifully crafted.">Fantastic</button>
+                            <button class="example-chip" type="button" data-text="Terrible experience, I hated every moment of it.">Terrible</button>
+                            <button class="example-chip" type="button" data-text="The film was not good at all, completely disappointing.">Not Good</button>
+                            <button class="example-chip" type="button" data-text="I did not hate the movie, it was actually pretty fun.">Not Hate</button>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <div class="hint"><kbd>Enter</kbd> to analyze, <kbd>Shift</kbd> + <kbd>Enter</kbd> for new line</div>
+                        <div class="button-row">
+                            <button id="clear-btn" class="btn-secondary" onclick="clearInput()" type="button">Clear</button>
+                            <button id="analyze-btn" class="btn-primary" onclick="analyze()" type="button">
+                                <span class="btn-text">Execute Analysis</span>
+                                <span class="spinner"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="error-msg" class="message"></div>
+                </div>
+            </div>
+
+            <div id="result-card" class="card results">
+                <div class="card-header">
+                    <div class="card-title">Inference Result</div>
+                    <div class="card-meta mono" id="result-time">Waiting for input</div>
+                </div>
+
+                <div class="empty-result">
+                    <div class="empty-icon">?</div>
+                    <strong>Standing by</strong>
+                    <span>Submit text payload for neural processing.</span>
+                </div>
+
+                <div class="result-content">
+                    <div class="result-main">
+                        <div class="sentiment-row">
+                            <div id="sentiment-badge" class="sentiment-badge">Sentiment</div>
+                            <div class="latency mono" id="latency-label">0 ms</div>
+                        </div>
+                        <div class="confidence-value mono" id="confidence-value">0%</div>
+                        <div class="confidence-label">Confidence Score</div>
+                        <div class="confidence-bar">
+                            <div id="confidence-fill" class="confidence-fill"></div>
+                        </div>
+                    </div>
+
+                    <div class="details">
+                        <div class="detail">
+                            <div class="detail-label">Classification</div>
+                            <div class="detail-value" id="detail-sentiment">-</div>
+                        </div>
+                        <div class="detail">
+                            <div class="detail-label">Raw Probability</div>
+                            <div class="detail-value mono" id="detail-probability">-</div>
+                        </div>
+                        <div class="detail">
+                            <div class="detail-label">Tokens Used</div>
+                            <div class="detail-value mono" id="detail-tokens">-</div>
+                        </div>
+                        <div class="detail">
+                            <div class="detail-label">Filtered Text</div>
+                            <div class="detail-value mono" id="detail-sample">-</div>
+                        </div>
+                        <div class="detail" style="grid-column: 1 / -1;">
+                            <div class="detail-label">Top Attention Weights</div>
+                            <div class="detail-value" id="detail-top-tokens">-</div>
+                        </div>
+                        <div class="detail" style="grid-column: 1 / -1;">
+                            <div class="detail-label">Pipeline Trace</div>
+                            <div class="detail-value mono" id="detail-preprocessing" style="font-size:0.85rem; color:var(--text-secondary);">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <footer>
+            <p>&copy; 2026 NLP Project. GloVe embeddings + PyTorch classifier.</p>
+        </footer>
+    </main>
+
+    <script>
+        const textarea = document.getElementById('sentence-input');
+        const charCount = document.getElementById('char-count');
+        const btn = document.getElementById('analyze-btn');
+        const errorMsg = document.getElementById('error-msg');
+        const resultCard = document.getElementById('result-card');
+        const resultTime = document.getElementById('result-time');
+        const latencyLabel = document.getElementById('latency-label');
+        const qualityText = document.getElementById('quality-text');
+        const qualityPill = document.getElementById('quality-pill');
+        const stopWords = new Set([
+            'a', 'an', 'the', 'and', 'or', 'but', 'if', 'while', 'with', 'without',
+            'of', 'to', 'in', 'on', 'for', 'from', 'by', 'at', 'as', 'into', 'over',
+            'under', 'between', 'through', 'during', 'before', 'after', 'above', 'below',
+            'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am', 'do', 'does',
+            'did', 'doing', 'have', 'has', 'had', 'having', 'will', 'would', 'could',
+            'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those',
+            'it', 'its', 'he', 'him', 'his', 'she', 'her', 'they', 'them', 'their',
+            'we', 'us', 'our', 'you', 'your', 'i', 'me', 'my', 'all', 'any', 'both',
+            'each', 'few', 'more', 'most', 'other', 'some', 'such', 'same', 'so',
+            'than', 'too', 'very', 'just', 'only', 'again', 'then', 'there', 'here'
+        ]);
+        const negationWords = new Set(['not', 'never', 'no', 'none', 'nor', 'neither', 'cannot']);
+
+        textarea.addEventListener('input', () => {
+            charCount.textContent = textarea.value.length;
+            updateInputFeedback();
+        });
+
+        document.querySelectorAll('.example-chip').forEach((chip) => {
+            chip.addEventListener('click', () => {
+                textarea.value = chip.dataset.text;
+                charCount.textContent = textarea.value.length;
+                updateInputFeedback();
+                textarea.focus();
+            });
+        });
+
+        textarea.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                analyze();
+            }
+        });
+
+        updateInputFeedback();
+
+        function normalizePreviewText(value) {
+            return value
+                .toLowerCase()
+                .replace(/can't|cant/g, 'cannot')
+                .replace(/won't|wont/g, 'will not')
+                .replace(/n't/g, ' not')
+                .replace(/[^a-zA-Z\s]/g, ' ');
+        }
+
+        function previewTokens(value) {
+            return normalizePreviewText(value)
+                .split(/\s+/)
+                .filter(Boolean)
+                .filter((token) => !stopWords.has(token) || negationWords.has(token))
+                .filter((token) => token.length > 2 || negationWords.has(token));
+        }
+
+        function updateInputFeedback() {
+            const tokens = previewTokens(textarea.value);
+
+            qualityPill.classList.remove('good', 'short');
+            if (!textarea.value.trim()) {
+                qualityPill.textContent = 'Waiting';
+                qualityText.textContent = 'Type at least three meaningful English words.';
+                return;
+            }
+
+            if (tokens.length >= 3) {
+                qualityPill.textContent = 'Good input';
+                qualityPill.classList.add('good');
+                qualityText.textContent = `${tokens.length} meaningful tokens will be sent after preprocessing.`;
+            } else {
+                qualityPill.textContent = 'Too short';
+                qualityPill.classList.add('short');
+                qualityText.textContent = `${tokens.length} meaningful token${tokens.length === 1 ? '' : 's'} found. Add more context for a better prediction.`;
+            }
+        }
+
+        function clearInput() {
+            textarea.value = '';
+            charCount.textContent = '0';
+            errorMsg.classList.remove('show');
+            resultCard.classList.remove('has-result');
+            resultTime.textContent = 'Waiting for input';
+            updateInputFeedback();
+            textarea.focus();
+        }
+
+        async function analyze() {
+            const sentence = textarea.value.trim();
+            if (!sentence) {
+                showError('Please enter an English sentence first.');
+                return;
+            }
+
+            btn.classList.add('loading');
+            btn.disabled = true;
+            errorMsg.classList.remove('show');
+
+            const startedAt = performance.now();
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sentence })
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    showError(data.error || 'Something went wrong while analyzing the sentence.');
+                    return;
+                }
+
+                const elapsed = Math.max(1, Math.round(performance.now() - startedAt));
+                displayResult(data, elapsed);
+            } catch (error) {
+                showError('Could not reach the Flask server. Make sure app.py is running.');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        function displayResult(data, elapsed) {
+            const isPositive = data.sentiment === 'positive';
+            const label = isPositive ? 'Positive' : 'Negative';
+
+            resultCard.classList.add('has-result');
+            resultTime.textContent = 'Completed';
+            latencyLabel.textContent = `${elapsed} ms`;
+
+            const badge = document.getElementById('sentiment-badge');
+            badge.className = `sentiment-badge ${data.sentiment}`;
+            badge.textContent = label;
+
+            document.getElementById('confidence-value').textContent = `${data.confidence}%`;
+            const fill = document.getElementById('confidence-fill');
+            fill.className = `confidence-fill ${data.sentiment}`;
+            fill.style.width = '0%';
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    fill.style.width = `${data.confidence}%`;
+                });
+            });
+
+            document.getElementById('detail-sentiment').textContent = label;
+            document.getElementById('detail-probability').textContent = Number(data.probability).toFixed(4);
+            document.getElementById('detail-tokens').textContent = data.tokens_used;
+            document.getElementById('detail-sample').textContent =
+                data.tokens_sample && data.tokens_sample.length ? data.tokens_sample.join(', ') : '-';
+            document.getElementById('detail-top-tokens').innerHTML = formatTopTokens(data.top_tokens);
+            document.getElementById('detail-preprocessing').textContent = formatPreprocessing(data);
+        }
+
+        function showError(message) {
+            errorMsg.textContent = message;
+            errorMsg.classList.add('show');
+        }
+
+        function formatTopTokens(tokens) {
+            if (!tokens || !tokens.length) {
+                return '-';
+            }
+
+            const chips = tokens.map((item) => {
+                const className = item.negated ? 'token-chip negated' : 'token-chip';
+                const label = item.negated ? `${item.token} x${item.weight} negated` : `${item.token} x${item.weight}`;
+                return `<span class="${className}">${label}</span>`;
+            });
+
+            return `<div class="token-list">${chips.join('')}</div>`;
+        }
+
+        function formatPreprocessing(data) {
+            const negations = data.negation_pairs && data.negation_pairs.length
+                ? data.negation_pairs.map((pair) => pair.join(' -> ')).join(', ')
+                : 'none';
+            return `> Removed stop words: ${data.removed_stopwords || 0}\n> Removed short words: ${data.removed_short_words || 0}\n> Negations applied: ${negations}`;
+        }
+    </script>
+</body>
+</html>

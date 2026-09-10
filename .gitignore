@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Large datasets / generated files
+*.npy
+*.rar
+*.pth
+*.csv
+*.kv
+
+# Cache
+glove_cache.kv
+glove_cache.kv.vectors.npy
+
+# Local Devin config
+.devin/config.local.json
